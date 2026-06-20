@@ -33,6 +33,8 @@
               size="small"
               type="primary"
               text
+              :loading="payingId === row.id"
+              :disabled="payingId !== null"
               @click="pay(row.id)"
             >
               标记已缴
@@ -64,6 +66,8 @@ const tableData = ref([])
 const loading = ref(false)
 const page = ref(1)
 const total = ref(0)
+// 防重复提交：记录正在缴费的罚款ID，操作期间禁用所有按钮
+const payingId = ref<number | null>(null)
 
 async function fetch() {
   loading.value = true
@@ -74,9 +78,18 @@ async function fetch() {
 }
 
 async function pay(id: number) {
-  await payFine(id)
-  ElMessage.success("标记成功")
-  fetch()
+  // 防重复提交：已有操作进行中则忽略
+  if (payingId.value !== null) return
+  payingId.value = id
+  try {
+    await payFine(id)
+    ElMessage.success("标记成功")
+    await fetch()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.msg || "标记失败")
+  } finally {
+    payingId.value = null
+  }
 }
 
 onMounted(fetch)

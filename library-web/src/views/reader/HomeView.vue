@@ -36,9 +36,9 @@
           <div class="book-author">{{ book.author }}</div>
           <div class="book-publisher">{{ book.publisher }}</div>
           <div class="book-availability">
-            <span class="availability-dot" :class="book.availableCopies > 0 ? 'available' : 'unavailable'"></span>
-            <span :class="book.availableCopies > 0 ? 'text-available' : 'text-unavailable'">
-              可借 {{ book.availableCopies }} / {{ book.totalCopies }}
+            <span class="availability-dot" :class="safeAvailable(book) > 0 ? 'available' : 'unavailable'"></span>
+            <span :class="safeAvailable(book) > 0 ? 'text-available' : 'text-unavailable'">
+              可借 {{ safeAvailable(book) }} / {{ book.totalCopies }}
             </span>
           </div>
         </div>
@@ -95,11 +95,11 @@
             <el-tag :type="detail.stockStatus==='AVAILABLE'?'success':detail.stockStatus==='RESERVED'?'warning':'danger'">
               {{ detail.stockStatus==='AVAILABLE'?'可借':detail.stockStatus==='RESERVED'?'已预约':'无库存' }}
             </el-tag>
-            ({{ detail.availableCopies }}/{{ detail.totalCopies }})
+            ({{ safeAvailable(detail) }}/{{ detail.totalCopies }})
           </el-descriptions-item>
         </el-descriptions>
         <div style="margin-top: 16px">
-          <el-button type="primary" v-if="detail.availableCopies>0" @click="doBorrow">借阅</el-button>
+          <el-button type="primary" v-if="safeAvailable(detail)>0" @click="doBorrow">借阅</el-button>
           <el-button type="warning" v-else @click="doReserve">预约</el-button>
         </div>
         <div style="margin-top: 24px">
@@ -145,6 +145,13 @@ const dialogVisible = ref(false)
 const detail = ref<any>(null)
 const reviewVisible = ref(false)
 const reviewForm = ref({ rating: 5, content: "", bookId: 0 })
+
+// 前端数据校验：确保可借数量不超过总数量，防止后端脏数据导致"可借 2 / 1"等异常显示
+function safeAvailable(book: any): number {
+  const available = Number(book.availableCopies) || 0
+  const total = Number(book.totalCopies) || 0
+  return Math.max(0, Math.min(available, total))
+}
 
 async function fetch() {
   const r: any = await getBooks({ keyword: keyword.value, page: page.value, pageSize: 8 })

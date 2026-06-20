@@ -108,7 +108,8 @@ public class BorrowServiceImpl implements BorrowService {
     @Override
     @Transactional
     public void returnBook(Long borrowId) {
-        BorrowRecord record = borrowRecordMapper.selectById(borrowId);
+        // 行级锁查询，防止并发下多次归还导致 availableCopies 超过 totalCopies
+        BorrowRecord record = borrowRecordMapper.selectByIdForUpdate(borrowId);
         if (record == null || !"BORROWING".equals(record.getStatus())) {
             throw new BusinessException("该记录不是借阅中状态");
         }
@@ -140,8 +141,8 @@ public class BorrowServiceImpl implements BorrowService {
                 reservationMapper.updateById(r);
             }
         } else {
-            // 无预约：归还公共库存
-            Book book = bookMapper.selectById(record.getBookId());
+            // 无预约：归还公共库存（行级锁保证 availableCopies 不会超过 totalCopies）
+            Book book = bookMapper.selectByIdForUpdate(record.getBookId());
             book.setAvailableCopies(book.getAvailableCopies() + 1);
             bookMapper.updateById(book);
         }
@@ -198,13 +199,19 @@ public class BorrowServiceImpl implements BorrowService {
     @Override
     @Transactional
     public void markLost(Long borrowId) {
-        BorrowRecord record = borrowRecordMapper.selectById(borrowId);
+        // 行级锁查询 + 状态校验，防止多次点击"丢失"导致 totalCopies 被重复扣减
+        BorrowRecord record = borrowRecordMapper.selectByIdForUpdate(borrowId);
         if (record == null) throw new BusinessException("借阅记录不存在");
+        if (!"BORROWING".equals(record.getStatus())) {
+            throw new BusinessException("该记录不是借阅中状态，无法标记丢失");
+        }
 
         record.setStatus("LOST");
         borrowRecordMapper.updateById(record);
 
-        Book book = bookMapper.selectById(record.getBookId());
+        // 标记丢失：借出时 availableCopies 已扣减，此处仅需扣减 totalCopies
+        // 行级锁保证 totalCopies 不会被并发重复扣减
+        Book book = bookMapper.selectByIdForUpdate(record.getBookId());
         book.setTotalCopies(book.getTotalCopies() - 1);
         bookMapper.updateById(book);
 

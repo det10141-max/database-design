@@ -31,13 +31,18 @@ public class BookServiceImpl implements BookService {
             qw.and(w -> w.like(Book::getTitle, req.getKeyword()).or().like(Book::getAuthor, req.getKeyword()));
         if (req.getCategoryId() != null) qw.eq(Book::getCategoryId, req.getCategoryId());
         qw.orderByDesc(Book::getCreatedAt);
-        return bookMapper.selectPage(new Page<>(req.getPage(), req.getPageSize()), qw);
+        Page<Book> p = bookMapper.selectPage(new Page<>(req.getPage(), req.getPageSize()), qw);
+        // 数据校验兜底：确保 availableCopies 不超过 totalCopies，避免历史脏数据导致前端显示异常
+        p.getRecords().forEach(this::sanitizeCopies);
+        return p;
     }
 
     @Override
     public BookDetailResponse detail(Long id, Long userId) {
         Book book = bookMapper.selectById(id);
         if (book == null) throw new BusinessException("图书不存在");
+        // 数据校验兜底：修正异常库存数据
+        sanitizeCopies(book);
         BookDetailResponse resp = new BookDetailResponse();
         BeanUtils.copyProperties(book, resp);
         if (book.getCategoryId() != null) {
@@ -99,5 +104,21 @@ public class BookServiceImpl implements BookService {
     @Override
     public List<com.library.dto.response.PopularBookVO> popular(int limit) {
         return bookMapper.selectPopular(limit);
+    }
+
+    /**
+     * 库存数据校验兜底：确保 availableCopies 始终在 [0, totalCopies] 范围内。
+     * 用于修正历史脏数据或并发异常导致的库存不一致，防止前端显示"可借 2 / 1"等异常。
+     */
+    private void sanitizeCopies(Book book) {
+        if (book.getTotalCopies() == null || book.getTotalCopies() < 0) {
+            book.setTotalCopies(0);
+        }
+        if (book.getAvailableCopies() == null || book.getAvailableCopies() < 0) {
+            book.setAvailableCopies(0);
+        }
+        if (book.getAvailableCopies() > book.getTotalCopies()) {
+            book.setAvailableCopies(book.getTotalCopies());
+        }
     }
 }

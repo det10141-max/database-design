@@ -51,6 +51,8 @@
               size="small"
               type="success"
               text
+              :loading="actingId === row.id && actingType === 'return'"
+              :disabled="actingId !== null"
               @click="doReturn(row.id)"
             >
               归还
@@ -60,6 +62,8 @@
               size="small"
               type="warning"
               text
+              :loading="actingId === row.id && actingType === 'lost'"
+              :disabled="actingId !== null"
               @click="doLost(row.id)"
             >
               丢失
@@ -92,6 +96,9 @@ const tableData = ref([])
 const loading = ref(false)
 const page = ref(1)
 const total = ref(0)
+// 防重复提交：记录当前正在操作的记录ID和操作类型，操作期间禁用所有按钮
+const actingId = ref<number | null>(null)
+const actingType = ref<"return" | "lost" | null>(null)
 
 function daysLeft(row: any) {
   return Math.ceil((new Date(row.dueDate).getTime() - Date.now()) / 86400000)
@@ -106,15 +113,37 @@ async function fetch() {
 }
 
 async function doReturn(id: number) {
-  await returnBook(id)
-  ElMessage.success("归还成功")
-  fetch()
+  // 防重复提交：已有操作进行中则忽略
+  if (actingId.value !== null) return
+  actingId.value = id
+  actingType.value = "return"
+  try {
+    await returnBook(id)
+    ElMessage.success("归还成功")
+    await fetch()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.msg || "归还失败")
+  } finally {
+    actingId.value = null
+    actingType.value = null
+  }
 }
 
 async function doLost(id: number) {
-  await markLost(id)
-  ElMessage.success("已标记丢失")
-  fetch()
+  // 防重复提交：已有操作进行中则忽略
+  if (actingId.value !== null) return
+  actingId.value = id
+  actingType.value = "lost"
+  try {
+    await markLost(id)
+    ElMessage.success("已标记丢失")
+    await fetch()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.msg || "标记丢失失败")
+  } finally {
+    actingId.value = null
+    actingType.value = null
+  }
 }
 
 onMounted(fetch)

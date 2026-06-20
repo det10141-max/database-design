@@ -9,6 +9,7 @@ import com.library.service.FineService;
 import com.library.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 
 @Service
@@ -29,8 +30,10 @@ public class FineServiceImpl implements FineService {
     }
 
     @Override
+    @Transactional
     public void pay(Long fineId) {
-        Fine f = fineMapper.selectById(fineId);
+        // 行级锁查询，防止并发下多次缴费
+        Fine f = fineMapper.selectByIdForUpdate(fineId);
         if (f == null) throw new BusinessException("罚款记录不存在");
         if ("PAID".equals(f.getStatus())) throw new BusinessException("该罚款已缴纳，无需重复操作");
         f.setStatus("PAID");
