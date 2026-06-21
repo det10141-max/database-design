@@ -8,6 +8,10 @@ echo   Start All Services
 echo ========================================
 echo.
 
+REM --- Force JDK 17 (Trae 沙箱默认 JDK 25，项目需要 JDK 17) ---
+set JAVA_HOME=C:\Program Files\Java\jdk-17.0.5
+set PATH=%JAVA_HOME%\bin;%PATH%
+
 REM --- Start Backend ---
 echo [1/2] Starting Backend on port 9090 ...
 start "Backend" mvn -f "%~dp0library-server\pom.xml" spring-boot:run

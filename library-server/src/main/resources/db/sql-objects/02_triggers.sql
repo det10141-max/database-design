@@ -24,7 +24,9 @@ BEGIN
     IF v_available IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '图书不存在';
     END IF;
-    IF v_available <= 0 THEN
+    -- available_copies 被 Java 层行级锁保护，先扣减再 insert；
+    -- 此处仅拦截已为负数的情况（数据库层兜底），避免误拦正常借阅
+    IF v_available < 0 THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '该书暂无可借副本，无法借阅';
     END IF;
 END$$
