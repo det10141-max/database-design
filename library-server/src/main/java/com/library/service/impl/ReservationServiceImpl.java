@@ -159,6 +159,74 @@ public class ReservationServiceImpl implements ReservationService {
                 br.getId());
     }
 
+    /**
+     * 管理员取消预约：支持 WAITING / FULFILLED 两种状态，自动处理库存与排队位置联动。
+     * - WAITING：仅排队位置前移（与读者取消一致）
+     * - FULFILLED：归还时库存已锁定给该预约者，取消时需释放给下一个等待者或公共池
+     */
+    @Override
+    @Transactional
+    public void adminCancel(Long reservationId) {
+        Reservation r = reservationMapper.selectById(reservationId);
+        if (r == null) {
+            throw new BusinessException("预约记录不存在");
+        }
+        String status = r.getStatus();
+        if (!"WAITING".equals(status) && !"FULFILLED".equals(status)) {
+            throw new BusinessException("该预约状态无法取消");
+        }
+
+        Book book = bookMapper.selectById(r.getBookId());
+
+        if ("WAITING".equals(status)) {
+            // 等待中：标记取消，后续等待者排队位置前移一位
+            Integer cancelledPosition = r.getQueuePosition();
+            r.setStatus("CANCELLED");
+            reservationMapper.updateById(r);
+            reservationMapper.selectList(new LambdaQueryWrapper<Reservation>()
+                    .eq(Reservation::getBookId, r.getBookId())
+                    .eq(Reservation::getStatus, "WAITING")
+                    .gt(Reservation::getQueuePosition, cancelledPosition)
+                    .orderByAsc(Reservation::getQueuePosition))
+                .forEach(next -> {
+                    next.setQueuePosition(next.getQueuePosition() - 1);
+                    reservationMapper.updateById(next);
+                });
+        } else {
+            // 已到书：库存已被锁定（归还时未加回公共池），需释放给下一个等待者或公共池
+            r.setStatus("CANCELLED");
+            reservationMapper.updateById(r);
+            List<Reservation> nextList = reservationMapper.selectList(
+                new LambdaQueryWrapper<Reservation>()
+                    .eq(Reservation::getBookId, r.getBookId())
+                    .eq(Reservation::getStatus, "WAITING")
+                    .orderByAsc(Reservation::getQueuePosition));
+            if (!nextList.isEmpty()) {
+                // 有后续等待者：库存转给第一位，并通知
+                Reservation next = nextList.get(0);
+                next.setStatus("FULFILLED");
+                next.setPickupDeadline(LocalDateTime.now().plusDays(appProperties.getReserve().getPickupDays()));
+                reservationMapper.updateById(next);
+                notificationService.create(next.getUserId(), "RESERVE_READY", "预约书已到馆",
+                        "您预约的图书已到馆，请于" + appProperties.getReserve().getPickupDays() + "天内到馆借阅", next.getId());
+                // 后续等待者排队位置前移一位
+                for (int i = 1; i < nextList.size(); i++) {
+                    Reservation after = nextList.get(i);
+                    after.setQueuePosition(after.getQueuePosition() - 1);
+                    reservationMapper.updateById(after);
+                }
+            } else {
+                // 无后续等待者：库存释放回公共池
+                book.setAvailableCopies(book.getAvailableCopies() + 1);
+                bookMapper.updateById(book);
+            }
+        }
+
+        // 通知读者预约已被管理员取消
+        notificationService.create(r.getUserId(), "ANNOUNCE", "预约已取消",
+                "管理员已取消您对《" + book.getTitle() + "》的预约", r.getId());
+    }
+
     @Override
     public List<Reservation> listByUser(Long userId) {
         List<Reservation> list = reservationMapper.selectList(new LambdaQueryWrapper<Reservation>()

@@ -40,8 +40,9 @@
         <el-table-column label="截止时间" width="170">
           <template #default="{ row }">
             <span v-if="row.status==='WAITING'">失效: {{ formatDate(row.expireDate) }}</span>
-            <span v-else-if="row.status==='FULFILLED'" class="deadline-warning">
+            <span v-else-if="row.status==='FULFILLED'" class="deadline-warning" :class="{ 'deadline-overdue': isOverdue(row) }">
               取书截止: {{ formatDate(row.pickupDeadline) }}
+              <span v-if="isOverdue(row)" class="overdue-tag">已逾期</span>
             </span>
             <span v-else>-</span>
           </template>
@@ -107,6 +108,11 @@ function formatDate(dt: string) {
   return new Date(dt).toLocaleString("zh-CN", { hour12: false })
 }
 
+// 判断已到书（FULFILLED）的取书截止时间是否已过
+function isOverdue(row: any) {
+  return row.status === 'FULFILLED' && row.pickupDeadline && new Date(row.pickupDeadline).getTime() < Date.now()
+}
+
 function onTabChange() {
   page.value = 1
   fetch()
@@ -161,6 +167,18 @@ onMounted(fetch)
   font-weight: 600;
   font-size: 13px;
 }
+/* 已逾期：取书截止时间已过 */
+.deadline-overdue {
+  color: var(--danger);
+}
+.overdue-tag {
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--danger-light);
+  color: var(--danger);
+  font-size: 12px;
+}
 .op-none { color: var(--text-placeholder); }
 .pagination-wrap {
   display: flex;
@@ -168,5 +186,20 @@ onMounted(fetch)
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid var(--border-light);
+}
+
+/* 响应式：窄窗口下表格横向滚动，避免列内容重叠 */
+:deep(.el-table) {
+  width: 100%;
+}
+:deep(.el-table .el-table__inner-wrapper) {
+  overflow-x: auto;
+}
+
+/* 窄窗口下分页居中显示 */
+@media (max-width: 768px) {
+  .pagination-wrap {
+    justify-content: center;
+  }
 }
 </style>

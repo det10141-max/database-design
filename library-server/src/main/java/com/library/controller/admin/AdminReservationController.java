@@ -1,10 +1,7 @@
 package com.library.controller.admin;
 
-import com.library.common.BusinessException;
 import com.library.common.PageResult;
 import com.library.common.Result;
-import com.library.entity.Reservation;
-import com.library.mapper.ReservationMapper;
 import com.library.service.ReservationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -17,7 +14,6 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class AdminReservationController {
     private final ReservationService reservationService;
-    private final ReservationMapper reservationMapper;
 
     /** 分页查询所有预约（可按状态筛选） */
     @GetMapping
@@ -28,12 +24,10 @@ public class AdminReservationController {
         return Result.ok(new PageResult<>(p.getRecords(), p.getTotal(), p.getCurrent(), p.getSize()));
     }
 
-    /** 管理员取消预约（复用 cancel 逻辑，自动更新排队位置） */
+    /** 管理员取消预约（支持 WAITING / FULFILLED，自动处理库存与排队位置） */
     @DeleteMapping("/{id}")
     public Result<?> cancel(@PathVariable Long id) {
-        Reservation r = reservationMapper.selectById(id);
-        if (r == null) throw new BusinessException("预约记录不存在");
-        reservationService.cancel(r.getUserId(), id);
+        reservationService.adminCancel(id);
         return Result.ok();
     }
 }
