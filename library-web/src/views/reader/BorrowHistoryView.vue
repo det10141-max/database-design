@@ -5,7 +5,7 @@
       借阅历史
     </div>
 
-    <el-table :data="list" stripe v-loading="loading" :row-class-name="rowClass">
+    <el-table :data="list" stripe v-loading="loading">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="bookTitle" label="图书名" min-width="180" show-overflow-tooltip />
       <el-table-column prop="borrowDate" label="借出日期" width="140" />
@@ -47,10 +47,6 @@ const loading = ref(false)
 const page = ref(1)
 const total = ref(0)
 
-function rowClass({ row }: any) {
-  return row.returnDate && new Date(row.returnDate) > new Date(row.dueDate) ? 'overdue-row' : ''
-}
-
 async function fetch() {
   loading.value = true
   const r: any = await getHistory({ page: page.value, pageSize: 10 })
@@ -72,9 +68,5 @@ onMounted(fetch)
   display: flex;
   justify-content: center;
   margin-top: 20px;
-}
-
-:deep(.overdue-row) td {
-  background: var(--danger-light) !important;
 }
 </style>

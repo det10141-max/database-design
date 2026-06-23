@@ -104,7 +104,15 @@ async function fetch() {
   loading.value = true
   try {
     const r: any = await getReservations()
-    list.value = r.data
+    const now = Date.now()
+    // 前端实时修正：已过取书截止时间的 FULFILLED 记录视为 EXPIRED
+    // （后端定时任务每天凌晨才批量处理，这里避免在过期后仍显示"取书借阅"按钮误导用户）
+    list.value = (r.data || []).map((item: any) => {
+      if (item.status === 'FULFILLED' && item.pickupDeadline && new Date(item.pickupDeadline).getTime() < now) {
+        return { ...item, status: 'EXPIRED' }
+      }
+      return item
+    })
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.msg || "加载预约列表失败")
   } finally {
